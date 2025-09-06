@@ -3,6 +3,7 @@ name = "rust-reference"
 version = "0.1.0"
 edition = "2024"
 
+
 [dependencies]
 compiler_builtins = { version = "0.1.160", features = ["mem"] }
 
@@ -17,11 +18,17 @@ panic = "abort"
 [profile.dev]
 lto = "fat"
 panic = "abort"
-opt-level = 0
+opt-level = 1 # this is as low as we can go before we hit segfaults
 codegen-units = 16
+overflow-checks = false
 
 [[bin]]
 name = "main"
 path = "src/main.rs"
+test = false
+bench = false
+
+[lib]
+crate-type = ['cdylib', 'staticlib']
 test = false
 bench = false

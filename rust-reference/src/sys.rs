@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use core::{arch::asm, mem::MaybeUninit, panic::PanicInfo};
+use core::{arch::asm, fmt::Arguments, mem::MaybeUninit, panic::PanicInfo};
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
@@ -87,7 +87,7 @@ pub unsafe fn getdents64(fd: isize, dirp: *mut MaybeUninit<u8>, count: usize) ->
             in("rsi") dirp,
             in("rdx") count,
             lateout("rax") ret,
-            // options(nostack, nomem, preserves_flags),
+            options(nostack, nomem, preserves_flags),
         );
         ret
     }
@@ -98,7 +98,7 @@ pub unsafe fn close(fd: isize) -> isize {
         let mut ret: isize;
         asm!(
             "syscall",
-            in("rax") 3,   // syscall number: close
+            in("rax") 3,
             in("rdi") fd,
             lateout("rax") ret,
             options(nostack, nomem, preserves_flags),
@@ -107,19 +107,15 @@ pub unsafe fn close(fd: isize) -> isize {
     }
 }
 
-pub unsafe fn write_buf(fd: usize, buf: &[u8]) -> isize {
-    unsafe {
-        let mut ret: isize = 1;
-        asm!(
-            "syscall",
-            inout("rax") ret,
-            in("rdi") fd,
-            in("rsi") buf.as_ptr(),
-            in("rdx") buf.len(),
-            // options(nostack, nomem, preserves_flags,),
-        );
-        ret
-    }
+pub unsafe fn write_slice(fd: usize, buf: &[u8]) -> isize {
+    unsafe { write(fd, buf.as_ptr() as _, buf.len()) }
+}
+
+pub unsafe fn dbg(s: &[u8]) -> isize {
+    unsafe { write_slice(1, s) }
+}
+pub unsafe fn dbg_isize(i: isize) -> isize {
+    unsafe { write_slice(1, itoa(i).as_slice()) }
 }
 
 pub struct ItoaResult {
@@ -137,25 +133,31 @@ impl ItoaResult {
 
     fn push(&mut self, c: u8) {
         self.len += 1;
-        self.buf[20usize.checked_sub(self.len).unwrap()] = c;
+        let pos: *mut u8 = unsafe { self.buf.as_mut_ptr().add(20usize - self.len) };
+        unsafe { *pos = c };
+        // self.buf[20usize - self.len] = c;
     }
 
-    pub fn as_str(&self) -> &str {
-        core::str::from_utf8(&self.buf[20usize.checked_sub(self.len).unwrap()..]).unwrap()
-    }
+    // pub fn as_str(&self) -> &str {
+    //     core::str::from_utf8(&self.buf[20usize.checked_sub(self.len).unwrap_or(0)..])
+    //         .unwrap_or("failed")
+    // }
 
     pub fn as_slice(&self) -> &[u8] {
-        &self.buf[20usize.checked_sub(self.len).unwrap()..]
+        b"abcd"
+        // &self.buf[20usize.checked_sub(self.len).unwrap_or(0)..]
     }
 }
 
+// without inline segfaults on dbg
+#[inline(always)]
 pub fn itoa(mut value: isize) -> ItoaResult {
     let mut result = ItoaResult::new();
 
     let neg = value < 0;
 
     loop {
-        result.push(b'0' + u8::try_from((value % 10).abs()).unwrap());
+        result.push(b'0' + u8::try_from((value % 10).abs()).unwrap_or(1));
         value /= 10;
         if value == 0 {
             break;
@@ -167,4 +169,16 @@ pub fn itoa(mut value: isize) -> ItoaResult {
     }
 
     result
+}
+
+// https://github.com/rust-lang/rust/blob/edb368491551a77d77a48446d4ee88b35490c565/src/libpanic_unwind/gcc.rs#L282
+#[cfg(debug_assertions)]
+#[unsafe(no_mangle)]
+unsafe extern "C" fn rust_eh_personality(
+    exceptionRecord: usize,
+    establisherFrame: usize,
+    contextRecord: usize,
+    dispatcherContext: usize,
+) -> ! {
+    exit(1)
 }
