@@ -27,8 +27,3 @@ name = "main"
 path = "src/main.rs"
 test = false
 bench = false
-
-[lib]
-crate-type = ['cdylib', 'staticlib']
-test = false
-bench = false

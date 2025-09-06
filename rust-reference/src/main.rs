@@ -1,14 +1,85 @@
 #![no_std]
 #![no_main]
 #![allow(unsafe_op_in_unsafe_fn)]
+#![feature(naked_functions_rustic_abi)]
+#![allow(unused)]
 
-use core::{ffi::CStr, mem::MaybeUninit};
+use core::{
+    arch::{asm, naked_asm, x86_64::_mm_test_all_ones},
+    ffi::CStr,
+    mem::MaybeUninit,
+    ops::Sub,
+};
+
+use crate::sys::{dbg, dbg_isize, exit};
 
 mod sys;
+
+unsafe fn get_args() -> isize {
+    let rsp: *const isize;
+    let argc: isize;
+    asm!(
+        "mov {0}, rsp",
+        "mov {1}, [rsp - 8]",
+        out(reg) rsp,
+        out(reg) argc,
+    );
+    (argc)
+}
+
+fn get_rsp() -> *const isize {
+    let mut argc;
+    unsafe {
+        asm!(
+            "
+            mov rax, rsp
+            ",
+            out("rax") argc,
+            options(nostack, nomem, preserves_flags,),
+        );
+    }
+    argc
+}
+
+unsafe fn main(argc: isize, argv: *const isize) {
+    dbg(b"argc: ");
+    dbg_isize(argc);
+    dbg(b"\n");
+    dbg(b"arg0: ");
+    sys::write_cstr(1, *argv.offset(0));
+    dbg(b"\n");
+    dbg(b"arg1: ");
+    sys::write_cstr(1, *argv.offset(1));
+    dbg(b"\n");
+}
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn _start() -> ! {
     unsafe {
+        // there is no way to remove .cfi sections from output in rust
+        // so the stack pointer may point to whereever and i have no guarantees
+        // unless you strip the binary
+        let argv: *const *const u8;
+        let rsp = get_rsp();
+        let argc = *(rsp.offset(1));
+        let argv = (rsp.offset(2));
+        main(argc, argv);
+
+        // if argc == 1 {
+        //     exit(1);
+        // }
+        // if argc == 2 {
+        //     exit(2);
+        // }
+        // if argc == 3 {
+        //     exit(3);
+        // } else {
+        //     exit(1);
+        // }
+
+        // dbg_isize((argc) as isize);
+        // dbg(b", ");
+        // dbg(b"\n");
 
         // // let mut buffer: [_; 8192] = MaybeUninit::uninit().assume_init();
         // // let n_read = sys::read(0, buffer.as_mut_ptr(), buffer.len());
@@ -39,7 +110,7 @@ pub unsafe extern "C" fn _start() -> ! {
         //     sys::exit(1);
         // } else {
         //     sys::write_buf(1, b"bytes_read: ");
-            
+
         //     let num_entries = sys::itoa(nread);
         //     sys::write_buf(1, num_entries.as_slice());
         //     sys::write_buf(1, b"\n");

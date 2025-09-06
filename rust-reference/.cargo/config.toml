@@ -1,6 +1,14 @@
 [build]
-rustflags = ["-C", "target-cpu=native"]
+rustflags = [
+    "-C",
+    "target-cpu=native",
+    "-C",
+    "link-arg=-Wl,--gc-sections",
+    "-C",
+    "debuginfo=0",
+]
 
 [profile.release]
 lto = true
-codegen-units = 1  # Optional but improves LTO effectiveness
+codegen-units = 1 # Optional but improves LTO effectiveness
+strip = true

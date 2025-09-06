@@ -16,6 +16,9 @@ EOF
 export CARGO_PROFILE_DEV_PANIC=abort
 RUSTFLAGS="-C target-cpu=native -C panic=abort" cargo build --target=x86_64-unknown-linux-gnu 
 
-echo "$headers" | ./target/x86_64-unknown-linux-gnu/debug/main
+# echo "$headers" | ./target/x86_64-unknown-linux-gnu/debug/main
+
+# ./target/x86_64-unknown-linux-gnu/debug/main --arg1
+./target/x86_64-unknown-linux-gnu/release/main
 
 echo $?

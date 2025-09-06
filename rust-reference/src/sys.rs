@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use core::{arch::asm, fmt::Arguments, mem::MaybeUninit, panic::PanicInfo};
+use core::{arch::asm, mem::MaybeUninit, panic::PanicInfo};
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
@@ -18,6 +18,7 @@ pub unsafe fn exit(code: isize) -> ! {
 }
 
 /// ret: num_written
+#[inline]
 pub unsafe fn write(fd: usize, buf: *const MaybeUninit<u8>, count: usize) -> isize {
     unsafe {
         let mut ret: isize = 1;
@@ -27,7 +28,7 @@ pub unsafe fn write(fd: usize, buf: *const MaybeUninit<u8>, count: usize) -> isi
             in("rdi") fd,
             in("rsi") buf,
             in("rdx") count,
-            options(nostack, nomem, preserves_flags,),
+            // options(nostack, nomem, preserves_flags,),
         );
         ret
     }
@@ -107,13 +108,26 @@ pub unsafe fn close(fd: isize) -> isize {
     }
 }
 
+#[inline]
 pub unsafe fn write_slice(fd: usize, buf: &[u8]) -> isize {
     unsafe { write(fd, buf.as_ptr() as _, buf.len()) }
 }
 
+#[inline]
+pub unsafe fn write_cstr(fd: usize, buf: isize) -> isize {
+    unsafe {
+        let mut ret: isize = 1;
+        let cstr = core::ffi::CStr::from_ptr(buf as _);
+        let slice = cstr.to_bytes();
+        write_slice(fd, slice)
+    }
+}
+
+#[inline(never)]
 pub unsafe fn dbg(s: &[u8]) -> isize {
     unsafe { write_slice(1, s) }
 }
+#[inline(never)]
 pub unsafe fn dbg_isize(i: isize) -> isize {
     unsafe { write_slice(1, itoa(i).as_slice()) }
 }
@@ -138,33 +152,27 @@ impl ItoaResult {
         // self.buf[20usize - self.len] = c;
     }
 
-    // pub fn as_str(&self) -> &str {
-    //     core::str::from_utf8(&self.buf[20usize.checked_sub(self.len).unwrap_or(0)..])
-    //         .unwrap_or("failed")
-    // }
-
     pub fn as_slice(&self) -> &[u8] {
-        b"abcd"
-        // &self.buf[20usize.checked_sub(self.len).unwrap_or(0)..]
+        &self.buf[20usize.checked_sub(self.len).unwrap_or(0)..]
     }
 }
 
 // without inline segfaults on dbg
 #[inline(always)]
-pub fn itoa(mut value: isize) -> ItoaResult {
+pub fn itoa(value: isize) -> ItoaResult {
     let mut result = ItoaResult::new();
-
-    let neg = value < 0;
+    let is_neg = value < 0;
+    let mut value = value.unsigned_abs();
 
     loop {
-        result.push(b'0' + u8::try_from((value % 10).abs()).unwrap_or(1));
+        result.push(b'0' + (value % 10) as u8);
         value /= 10;
         if value == 0 {
             break;
         }
     }
 
-    if neg {
+    if is_neg {
         result.push(b'-');
     }
 
@@ -172,13 +180,13 @@ pub fn itoa(mut value: isize) -> ItoaResult {
 }
 
 // https://github.com/rust-lang/rust/blob/edb368491551a77d77a48446d4ee88b35490c565/src/libpanic_unwind/gcc.rs#L282
-#[cfg(debug_assertions)]
-#[unsafe(no_mangle)]
-unsafe extern "C" fn rust_eh_personality(
-    exceptionRecord: usize,
-    establisherFrame: usize,
-    contextRecord: usize,
-    dispatcherContext: usize,
-) -> ! {
-    exit(1)
-}
+// #[cfg(debug_assertions)]
+// #[unsafe(no_mangle)]
+// unsafe extern "C" fn rust_eh_personality(
+//     _exception_record: usize,
+//     _establisher_frame: usize,
+//     _context_record: usize,
+//     _dispatcher_context: usize,
+// ) -> ! {
+//     exit(1)
+// }
